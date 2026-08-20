@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 智能醫院排班系統</title>
+<style>
+    :root {
+        --primary: #2563eb;
+        --primary-dark: #1d4ed8;
+        --danger: #dc2626;
+        --success: #16a34a;
+        --bg: #f4f7f6;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; background: var(--bg); color: #1f2937; }
+    header { background: #111827; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 1.2rem; margin: 0; }
+    #role-info { font-size: 0.9rem; color: #d1d5db; display: flex; align-items: center; gap: 10px; }
+    #role-info button { margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    input, select { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; }
+    button { padding: 9px 16px; margin: 4px 4px 4px 0; cursor: pointer; border: none; border-radius: 6px; background: var(--primary); color: white; font-size: 0.9rem; transition: background 0.15s; }
+    button:hover { background: var(--primary-dark); }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: #b91c1c; }
+    button.success { background: var(--success); }
+    button.success:hover { background: #15803d; }
+    button.ghost { background: transparent; color: #d1d5db; border: 1px solid #4b5563; }
+    button.ghost:hover { background: #1f2937; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 10px; text-align: center; font-size: 0.9rem; }
+    th { background: #1f2937; color: white; }
+    .shiftD { background: #c6efce; color: #006100; }
+    .shiftE { background: #ffeb9c; color: #9c6500; }
+    .shiftN { background: #ffc7ce; color: #9c0006; }
+    .offday { background: #e5e7eb; color: #9ca3af; }
+    td[onclick] { cursor: pointer; }
+    .violation { outline: 3px solid var(--danger); position: relative; }
+    .violation::after { content: "⚠"; position: absolute; top: 1px; right: 3px; font-size: 11px; color: var(--danger); }
+    #warning-msg { color: var(--danger); margin-top: 10px; font-weight: bold; min-height: 1.2em; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .legend span { display: inline-block; padding: 3px 10px; border-radius: 4px; margin-right: 8px; font-size: 0.85rem; }
+    label { font-size: 0.85rem; color: #4b5563; margin-right: 4px; }
+    .hint { color: #6b7280; font-size: 0.85rem; }
+    details.card summary { cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>🏥 AI 智能醫院排班系統</h1>
+    <div id="role-info"></div>
+</header>
+
+<main>
+    <div class="card" id="login-section">
+        <h3>登入</h3>
+        <div class="row">
+            <input id="username" placeholder="帳號 (例：admin, nurse0)">
+            <input id="password" type="password" placeholder="密碼">
+            <button onclick="login()">登入</button>
+        </div>
+        <p class="hint">預設帳號：admin / nurse0 ~ nurse25（共 26 位護理師）。預設密碼請洽系統管理員（部署時透過環境變數設定，未設定時預設為 admin123 / nurse123）。</p>
+    </div>
+
+    <div id="main-section" style="display:none;">
+
+        <details class="card" id="account-section">
+            <summary>🔑 修改我的密碼</summary>
+            <div class="row" style="margin-top:10px;">
+                <input id="old-pw" type="password" placeholder="原密碼">
+                <input id="new-pw" type="password" placeholder="新密碼 (至少 6 碼)">
+                <button onclick="changePassword()">更新密碼</button>
+            </div>
+        </details>
+
+        <div class="card" id="admin-config-section" style="display:none;">
+            <h3>⚙️ 排班參數設定（管理員）</h3>
+            <div class="row">
+                <label>護理師人數</label>
+                <input id="cfg-nurses" type="number" min="1" style="width:70px;">
+                <label>排班天數</label>
+                <input id="cfg-days" type="number" min="1" style="width:70px;">
+                <label>最大連續上班天數</label>
+                <input id="cfg-consec" type="number" min="1" style="width:70px;">
+                <button onclick="saveConfig()">儲存設定</button>
+            </div>
+        </div>
+
+        <details class="card" id="admin-create-section" style="display:none;">
+            <summary>➕ 新增護理師帳號（管理員）</summary>
+            <div class="row" style="margin-top:10px;">
+                <input id="new-nurse-username" placeholder="帳號 (例：nurse3)">
+                <input id="new-nurse-name" placeholder="姓名">
+                <input id="new-nurse-password" type="password" placeholder="初始密碼">
+                <button onclick="createNurse()">建立帳號</button>
+            </div>
+        </details>
+
+        <div class="card" id="dayoff-section" style="display:none;">
+            <h3>📅 預假申請</h3>
+            <div class="row">
+                <input id="dayoff-day" type="number" placeholder="天數 (0起算)" style="width:140px;">
+                <button onclick="requestDayOff()">送出預假</button>
+                <button class="danger" onclick="cancelDayOff()">取消該天預假</button>
+            </div>
+            <div id="my-dayoffs" style="margin-top:8px; font-size:0.85rem; color:#4b5563;"></div>
+        </div>
+
+        <div class="card">
+            <div class="row">
+                <button onclick="generate()">🤖 自動生成班表</button>
+                <button class="success" onclick="saveSchedule()">💾 儲存目前班表</button>
+                <button onclick="exportExcel()">📥 匯出 Excel</button>
+                <button onclick="loadSchedule()">🔄 重新載入班表</button>
+            </div>
+            <div class="legend" style="margin-top:8px;">
+                <span class="shiftD">D 白班</span>
+                <span class="shiftE">E 小夜班</span>
+                <span class="shiftN">N 大夜班</span>
+                <span class="offday">OFF 休假</span>
+            </div>
+            <p class="hint">提示：點擊儲存格可修改班別，輸入 D / E / N，留空白代表 OFF（休假）。規則：不可 E 接 D、不可 D 或 E 接 N。修改後記得按「儲存目前班表」才會存到伺服器。</p>
+            <div id="table-container"></div>
+            <div id="warning-msg"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+    // 本機用瀏覽器直接開啟 index.html (file://) 時，預設連到本機 8000 埠的後端；
+    // 若是由後端伺服器（Docker / 雲端部署）一起提供這個頁面，則直接用同網域相對路徑呼叫 API。
+    const API = location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+    let schedule = {};
+    let myUsername = "", myRole = "", myId = -1;
+    let NUM_NURSES = 3, NUM_DAYS = 7;
+    let nurseNames = {};
+    let token = "";
+
+    async function api(path, method = "GET", body = null, auth = true) {
+        const headers = { "Content-Type": "application/json" };
+        if (auth && token) headers["Authorization"] = "Bearer " + token;
+        const opts = { method, headers };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(API + path, opts);
+        if (res.status === 401) {
+            logout(true);
+            throw new Error("登入已過期，請重新登入");
+        }
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(err.detail || "發生錯誤");
+        }
+        return res.json();
+    }
+
+    async function login() {
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+        try {
+            const data = await api("/login", "POST", { username, password }, false);
+            token = data.token;
+            myUsername = username; myRole = data.role; myId = data.id;
+            localStorage.setItem("hospital_scheduler_session", JSON.stringify({
+                token, username: myUsername, role: myRole, id: myId, name: data.name
+            }));
+            enterApp(data.name);
+        } catch (e) {
+            alert("登入失敗：" + e.message);
+        }
+    }
+
+    function logout(silent) {
+        if (!silent) api("/logout", "POST").catch(() => {});
+        token = ""; myUsername = ""; myRole = ""; myId = -1;
+        localStorage.removeItem("hospital_scheduler_session");
+        document.getElementById("login-section").style.display = "block";
+        document.getElementById("main-section").style.display = "none";
+        document.getElementById("role-info").innerHTML = "";
+        if (!silent) location.reload();
+    }
+
+    async function enterApp(name) {
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("main-section").style.display = "block";
+        document.getElementById("role-info").innerHTML =
+            `<span>${name}（${myRole}）</span><button class="ghost" onclick="logout()">登出</button>`;
+
+        document.getElementById("admin-config-section").style.display = myRole === "admin" ? "block" : "none";
+        document.getElementById("admin-create-section").style.display = myRole === "admin" ? "block" : "none";
+        document.getElementById("dayoff-section").style.display = myRole === "nurse" ? "block" : "none";
+
+        await loadConfig();
+        await loadNurses();
+        await loadSchedule();
+        if (myRole === "nurse") await refreshMyDayOffs();
+    }
+
+    // 若瀏覽器已有先前登入的 session，嘗試自動恢復（token 尚未過期才會成功）
+    (async function tryAutoLogin() {
+        const saved = localStorage.getItem("hospital_scheduler_session");
+        if (!saved) return;
+        try {
+            const session = JSON.parse(saved);
+            token = session.token;
+            await api("/config"); // 驗證 token 是否仍有效
+            myUsername = session.username; myRole = session.role; myId = session.id;
+            enterApp(session.name);
+        } catch (e) {
+            token = "";
+            localStorage.removeItem("hospital_scheduler_session");
+        }
+    })();
+
+    async function changePassword() {
+        const old_password = document.getElementById("old-pw").value;
+        const new_password = document.getElementById("new-pw").value;
+        try {
+            const data = await api("/change_password", "POST", { old_password, new_password });
+            alert(data.message);
+            document.getElementById("old-pw").value = "";
+            document.getElementById("new-pw").value = "";
+        } catch (e) {
+            alert("修改失敗：" + e.message);
+        }
+    }
+
+    async function createNurse() {
+        const username = document.getElementById("new-nurse-username").value.trim();
+        const name = document.getElementById("new-nurse-name").value.trim();
+        const password = document.getElementById("new-nurse-password").value;
+        try {
+            const data = await api("/admin/create_nurse", "POST", { username, name, password });
+            alert(data.message);
+            await loadConfig();
+            await loadNurses();
+        } catch (e) {
+            alert("新增失敗：" + e.message);
+        }
+    }
+
+    async function loadConfig() {
+        const cfg = await api("/config");
+        NUM_NURSES = cfg.num_nurses; NUM_DAYS = cfg.num_days;
+        document.getElementById("cfg-nurses").value = cfg.num_nurses;
+        document.getElementById("cfg-days").value = cfg.num_days;
+        document.getElementById("cfg-consec").value = cfg.max_consecutive_days;
+    }
+
+    async function saveConfig() {
+        try {
+            const payload = {
+                num_nurses: parseInt(document.getElementById("cfg-nurses").value),
+                num_days: parseInt(document.getElementById("cfg-days").value),
+                max_consecutive_days: parseInt(document.getElementById("cfg-consec").value),
+            };
+            await api("/config", "POST", payload);
+            NUM_NURSES = payload.num_nurses; NUM_DAYS = payload.num_days;
+            await loadNurses();
+            await loadSchedule();
+            alert("設定已更新，可重新產生班表");
+        } catch (e) {
+            alert("設定失敗：" + e.message);
+        }
+    }
+
+    async function loadNurses() {
+        const list = await api("/nurses");
+        nurseNames = {};
+        list.forEach(u => nurseNames[u.id] = u.name);
+    }
+
+    async function loadSchedule() {
+        schedule = await api("/schedule");
+        renderTable();
+    }
+
+    async function generate() {
+        try {
+            schedule = await api("/schedule", "POST");
+            renderTable();
+            document.getElementById("warning-msg").innerText = "";
+        } catch (e) {
+            document.getElementById("warning-msg").innerText = "排班失敗：" + e.message;
+        }
+    }
+
+    async function saveSchedule() {
+        try {
+            await api("/schedule/save", "POST", { schedule });
+            alert("班表已儲存到伺服器");
+        } catch (e) {
+            alert("儲存失敗：" + e.message);
+        }
+    }
+
+    function renderTable() {
+        let html = `<table><tr><th>護理人員</th>`;
+        for (let d = 0; d < NUM_DAYS; d++) html += `<th>Day ${d}</th>`;
+        html += `</tr>`;
+
+        for (let n = 0; n < NUM_NURSES; n++) {
+            html += `<tr><td>${nurseNames[n] || ("護理師 " + n)}</td>`;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                let entry = (schedule[d] || []).find(s => s.nurse === n);
+                let shift = entry ? entry.shift : "";
+                let label = shift || "OFF";
+                let cls = shift ? `shift${shift}` : "offday";
+                if (checkIsViolated(n, d, shift)) cls += " violation";
+                html += `<td class="${cls}" onclick="editShift(${n}, ${d})">${label}</td>`;
+            }
+            html += `</tr>`;
+        }
+        html += `</table>`;
+        document.getElementById("table-container").innerHTML = html;
+    }
+
+    function checkIsViolated(nurse, day, shift) {
+        if (!shift) return false;
+        let prevShift = day > 0 ? (schedule[day - 1] || []).find(s => s.nurse === nurse)?.shift : null;
+        let nextShift = day < NUM_DAYS - 1 ? (schedule[day + 1] || []).find(s => s.nurse === nurse)?.shift : null;
+        // 不可 E 接 D
+        if (prevShift === "E" && shift === "D") return true;
+        if (shift === "E" && nextShift === "D") return true;
+        // 不可 D 或 E 接 N
+        if ((prevShift === "D" || prevShift === "E") && shift === "N") return true;
+        if ((shift === "D" || shift === "E") && nextShift === "N") return true;
+        return false;
+    }
+
+    function editShift(n, d) {
+        if (myRole === "nurse" && n !== myId) return alert("你只能修改自己的班表！");
+        let val = prompt("請輸入班別代碼 (D / E / N，留空白代表 OFF 休假):");
+        if (val === null) return;
+
+        if (!schedule[d]) schedule[d] = [];
+        schedule[d] = schedule[d].filter(s => s.nurse !== n);
+        const code = val.trim().toUpperCase();
+        if (code !== "") {
+            if (!["D", "E", "N"].includes(code)) return alert("班別代碼必須是 D、E 或 N");
+            schedule[d].push({ nurse: n, shift: code });
+        }
+        renderTable();
+    }
+
+    async function exportExcel() {
+        try {
+            const data = await api("/export_excel");
+            alert(`匯出完成！檔案：${data.file}（於伺服器所在資料夾）`);
+        } catch (e) {
+            alert("匯出失敗：" + e.message);
+        }
+    }
+
+    async function requestDayOff() {
+        const day = document.getElementById("dayoff-day").value;
+        if (day === "") return alert("請輸入天數");
+        try {
+            const data = await api("/request_dayoff", "POST", { day: parseInt(day) });
+            alert(data.message);
+            await refreshMyDayOffs();
+        } catch (e) {
+            alert("申請失敗：" + e.message);
+        }
+    }
+
+    async function cancelDayOff() {
+        const day = document.getElementById("dayoff-day").value;
+        if (day === "") return alert("請輸入要取消的天數");
+        try {
+            const data = await api("/dayoff/cancel", "POST", { day: parseInt(day) });
+            alert(data.message);
+            await refreshMyDayOffs();
+        } catch (e) {
+            alert("取消失敗：" + e.message);
+        }
+    }
+
+    async function refreshMyDayOffs() {
+        const all = await api("/dayoffs");
+        const mine = all.filter(e => e.nurse_id === myId).map(e => e.day).sort((a, b) => a - b);
+        document.getElementById("my-dayoffs").innerText =
+            mine.length ? `已申請預假天數：${mine.join(", ")}` : "尚未申請任何預假";
+    }
+</script>
+</body>
+</html>

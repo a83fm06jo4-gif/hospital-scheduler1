@@ -1,0 +1,16 @@
+services:
+  scheduler:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # 正式使用前請務必修改這兩組預設密碼！
+      - ADMIN_PASSWORD=please_change_me
+      - NURSE_DEFAULT_PASSWORD=please_change_me_too
+      - DATA_DIR=/app/data
+    volumes:
+      # 掛載 volume 讓帳號/密碼/班表資料在容器重建後仍保留
+      - scheduler_data:/app/data
+
+volumes:
+  scheduler_data:
