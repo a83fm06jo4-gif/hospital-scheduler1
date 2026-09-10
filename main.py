@@ -61,6 +61,8 @@ def _cloud_load_raw():
         headers={"X-Master-Key": JSONBIN_API_KEY},
         timeout=10,
     )
+    if not resp.ok:
+        print(f"[cloud storage] GET 失敗，狀態碼 {resp.status_code}，回應內容：{resp.text[:500]}")
     resp.raise_for_status()
     return resp.json()["record"]
 
@@ -72,6 +74,8 @@ def _cloud_save_raw(data):
         json=data,
         timeout=10,
     )
+    if not resp.ok:
+        print(f"[cloud storage] PUT 失敗，狀態碼 {resp.status_code}，回應內容：{resp.text[:500]}")
     resp.raise_for_status()
 
 # ---------------------------------------------------------------------------
@@ -158,12 +162,17 @@ def load_data():
         try:
             data = _cloud_load_raw()
             if not isinstance(data, dict) or "config" not in data:
-                raise ValueError("bin 是空的或格式不對，視為初次使用")
-        except Exception:
+                raise ValueError("雲端 Bin 目前是空的或格式不符，視為初次使用，將寫入預設資料")
+            return _apply_migrations(data)
+        except Exception as e:
+            print(f"[cloud storage] 讀取雲端資料失敗，改用預設資料：{e}")
             data = _default_data()
-            _cloud_save_raw(data)
+            try:
+                _cloud_save_raw(data)
+                print("[cloud storage] 已將預設資料寫入雲端 Bin")
+            except Exception as e2:
+                print(f"[cloud storage] 寫入雲端資料失敗，本次僅使用暫時的記憶體資料，尚未真正持久化：{e2}")
             return data
-        return _apply_migrations(data)
 
     if not os.path.exists(DATA_FILE):
         data = _default_data()
@@ -176,7 +185,11 @@ def load_data():
 
 def save_data(data):
     if USE_CLOUD_STORAGE:
-        _cloud_save_raw(data)
+        try:
+            _cloud_save_raw(data)
+        except Exception as e:
+            print(f"[cloud storage] 儲存資料到雲端失敗：{e}")
+            raise
         return
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
