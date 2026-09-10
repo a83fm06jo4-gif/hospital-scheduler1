@@ -15,7 +15,7 @@ uvicorn main:app --reload
 | 帳號 | 密碼 | 角色 |
 |---|---|---|
 | admin | admin123（或環境變數 ADMIN_PASSWORD） | 管理員 |
-| nurse0 ~ nurse2 | nurse123（或環境變數 NURSE_DEFAULT_PASSWORD） | 護理師 |
+| nurse0 ~ nurse25 | nurse123（或環境變數 NURSE_DEFAULT_PASSWORD） | 護理師（共 26 位） |
 
 **強烈建議登入後立即在「修改我的密碼」區塊更改預設密碼。**
 
@@ -73,7 +73,8 @@ docker run -d -p 8000:8000 \
 4. Environment 分頁新增環境變數：
    - `ADMIN_PASSWORD`
    - `NURSE_DEFAULT_PASSWORD`
-   - `DATA_DIR` = `/app/data`（若要資料持久化，需另外掛 Render 的 **Persistent Disk** 到 `/app/data`；Render 免費方案不含持久化磁碟，重新部署資料會重置，請留意）
+   - 若要用雲端資料庫解決資料不持久的問題，請參考下方「四、設定雲端資料庫」再加上
+     `JSONBIN_API_KEY` / `JSONBIN_BIN_ID`
 5. 部署完成後 Render 會給一個 `https://xxx.onrender.com` 網址，直接打開即可使用。
 
 ### Railway
@@ -84,21 +85,38 @@ docker run -d -p 8000:8000 \
 4. **Variables** 分頁新增：
    - `ADMIN_PASSWORD`
    - `NURSE_DEFAULT_PASSWORD`
-   - `DATA_DIR=/app/data`
-5. 若要資料持久化，於 Railway 專案加一個 **Volume**，掛載路徑設為 `/app/data`。
-6. **Settings → Networking** 產生一個公開網域，即可對外存取。
+   - 同上，建議加上 `JSONBIN_API_KEY` / `JSONBIN_BIN_ID`（見下方第四節）
+5. **Settings → Networking** 產生一個公開網域，即可對外存取。
 
 ### 共通注意事項
 
-- 系統目前用**單一伺服器行程**保存登入 Token（存在記憶體），若雲端平台會自動重啟/多實例擴展（scale > 1 instance），使用者可能需要重新登入，或不同請求打到不同實例導致 Token 失效。單一 instance、小型單位使用沒問題；若要多實例，需要把 Token 改存到 Redis 之類的共用儲存（目前版本未包含，之後可以再加）。
-- `CORSMiddleware` 目前開放所有來源（`allow_origins=["*"]`），部署到正式網域後建議改成只允許你的網域，例如：
-  ```python
-  app.add_middleware(
-      CORSMiddleware,
-      allow_origins=["https://your-domain.com"],
-      allow_methods=["*"],
-      allow_headers=["*"],
-  )
-  ```
+- 系統目前用**單一伺服器行程**保存登入 Token（存在記憶體），若雲端平台會自動重啟/多實例擴展（scale > 1 instance），使用者可能需要重新登入。單一 instance、小型單位使用沒問題。
+- `CORSMiddleware` 目前開放所有來源（`allow_origins=["*"]`），部署到正式網域後建議改成只允許你的網域。
 - 務必透過環境變數設定 `ADMIN_PASSWORD` / `NURSE_DEFAULT_PASSWORD`，不要用預設密碼上線。
-- 目前用 HTTP（無 HTTPS）僅適合本機測試；正式對外服務請確保雲端平台有提供 HTTPS（Render / Railway 預設網域都有）。
+
+---
+
+## 四、設定雲端資料庫（解決資料不持久的問題）
+
+免費方案（Render / Railway 免費層）預設沒有硬碟持久化，伺服器重啟或重新部署時，`data_store.json`
+裡的帳號密碼、班表、預假紀錄都會被重置。設定好以下兩個環境變數後，系統會自動改用
+[JSONBin.io](https://jsonbin.io)（免費雲端資料儲存）取代本機檔案，資料就能永久保存。
+
+### 步驟
+
+1. 到 https://jsonbin.io 免費註冊一個帳號（email 或 Google 登入都可以）
+2. 登入後，左側選單找 **API Keys**，複製你的 **X-Master-Key**（一長串英數字）
+3. 回到主畫面，點 **Create Bin**（建立一個新的資料倉庫），內容隨便貼 `{}` 就好，按 Create
+4. 建立完成後，網址列或 Bin 詳細資訊裡會有一串 **Bin ID**（例如 `65f1a2b3c4d5e6f7g8h9i0j1`），複製起來
+5. 到 Render（或 Railway）的 **Environment** 分頁，新增兩個環境變數：
+   - `JSONBIN_API_KEY` = 剛剛複製的 X-Master-Key
+   - `JSONBIN_BIN_ID` = 剛剛複製的 Bin ID
+6. 存檔後 Render 會自動重新部署，之後系統就會把所有資料讀寫到這個雲端 Bin，不再依賴本機檔案
+
+### 注意事項
+
+- 這兩個環境變數**沒有設定時**，系統會自動退回本機檔案儲存（本機測試不受影響，不用擔心）
+- JSONBin.io 免費方案有請求次數限制（通常每月數萬次，一般小型單位使用綽綽有餘）
+- `X-Master-Key` 等同於資料庫密碼，不要外流或分享給不信任的人
+- 設定完成後，可以到 https://jsonbin.io 網站上你剛建立的那個 Bin，重新整理頁面應該就能看到
+  系統寫入的完整資料（帳號、班表等），確認雲端儲存有正常運作
