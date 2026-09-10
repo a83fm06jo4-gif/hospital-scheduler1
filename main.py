@@ -49,8 +49,8 @@ TOKEN_TTL_SECONDS = 8 * 60 * 60
 # 雲端資料儲存 (JSONBin.io)
 # ---------------------------------------------------------------------------
 
-JSONBIN_API_KEY = os.environ.get("JSONBIN_API_KEY")
-JSONBIN_BIN_ID = os.environ.get("JSONBIN_BIN_ID")
+JSONBIN_API_KEY = (os.environ.get("JSONBIN_API_KEY") or "").strip()
+JSONBIN_BIN_ID = (os.environ.get("JSONBIN_BIN_ID") or "").strip()
 USE_CLOUD_STORAGE = bool(JSONBIN_API_KEY and JSONBIN_BIN_ID)
 JSONBIN_BASE = "https://api.jsonbin.io/v3/b"
 
@@ -103,8 +103,8 @@ def verify_password(password: str, stored: str) -> bool:
 # 資料持久化
 # ---------------------------------------------------------------------------
 
-ADMIN_DEFAULT_PW = os.environ.get("ADMIN_PASSWORD", "admin123")
-NURSE_DEFAULT_PW = os.environ.get("NURSE_DEFAULT_PASSWORD", "nurse123")
+ADMIN_DEFAULT_PW = (os.environ.get("ADMIN_PASSWORD") or "admin123").strip()
+NURSE_DEFAULT_PW = (os.environ.get("NURSE_DEFAULT_PASSWORD") or "nurse123").strip()
 DEFAULT_NUM_NURSES = 26
 
 
